@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scott & Mary Chat</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -13,34 +14,16 @@
             padding: 20px;
             color: #fff;
         }
-        .container {
-            max-width: 500px;
-            margin: 0 auto;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 8px;
-            font-size: 1.5rem;
-        }
-        .subtitle {
-            text-align: center;
-            color: #888;
-            margin-bottom: 20px;
-            font-size: 0.85rem;
-        }
+        .container { max-width: 500px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 8px; font-size: 1.5rem; }
+        .subtitle { text-align: center; color: #888; margin-bottom: 20px; font-size: 0.85rem; }
         .section {
             background: #ffffff10;
             border-radius: 12px;
             padding: 15px;
             margin-bottom: 15px;
         }
-        label {
-            display: block;
-            font-size: 1rem;
-            color: #fff;
-            margin-bottom: 12px;
-            text-align: center;
-        }
+        label { display: block; font-size: 1rem; color: #fff; margin-bottom: 10px; text-align: center; }
         input, button {
             width: 100%;
             padding: 16px;
@@ -49,25 +32,22 @@
             font-size: 1.1rem;
             margin-bottom: 10px;
         }
-        input {
-            background: #ffffff15;
-            color: #fff;
-        }
-        input::placeholder { color: #666; }
+        input { background: #ffffff15; color: #fff; text-align: center; }
         button {
             background: #3b82f6;
             color: #fff;
             font-weight: 600;
             cursor: pointer;
+            font-size: 1.2rem;
+            padding: 20px;
         }
         button:hover { background: #2563eb; }
-        button.mary { background: #ec4899; font-size: 1.3rem; padding: 20px; }
+        button.mary { background: #ec4899; }
         button.mary:hover { background: #db2777; }
-        button.scott { background: #10b981; font-size: 1.3rem; padding: 20px; }
+        button.scott { background: #10b981; }
         button.scott:hover { background: #059669; }
-        
         .messages {
-            height: 350px;
+            height: 320px;
             overflow-y: auto;
             background: #00000030;
             border-radius: 8px;
@@ -79,153 +59,169 @@
             border-radius: 12px;
             margin-bottom: 8px;
             max-width: 85%;
-            word-wrap: break-word;
         }
-        .message.mary {
-            background: #ec4899;
-            margin-left: auto;
-            border-bottom-right-radius: 4px;
-        }
-        .message.scott {
-            background: #10b981;
-            border-bottom-left-radius: 4px;
-        }
-        .message.sent {
-            margin-left: auto;
-        }
-        .message .name {
-            font-size: 0.75rem;
-            opacity: 0.8;
-            margin-bottom: 2px;
-            font-weight: bold;
-        }
-        .message .time {
-            font-size: 0.7rem;
-            opacity: 0.6;
-            margin-top: 4px;
-        }
-        
-        .chat-input {
-            display: flex;
-            gap: 10px;
-        }
-        .chat-input input {
-            flex: 1;
-            margin: 0;
-        }
-        .chat-input button {
-            width: auto;
-            padding: 16px 24px;
-            margin: 0;
-        }
-        
-        #joinSection { display: block; }
-        #chatSection { display: none; }
-        
-        .join-buttons {
-            display: flex;
-            gap: 15px;
-            flex-direction: column;
-        }
-        .connected-status {
-            text-align: center;
-            padding: 8px;
-            background: #10b98133;
-            color: #34d399;
-            border-radius: 8px;
-            margin-bottom: 10px;
-        }
+        .message.mary { background: #ec4899; margin-left: auto; }
+        .message.scott { background: #10b981; }
+        .message .name { font-size: 0.75rem; opacity: 0.8; font-weight: bold; }
+        .message .time { font-size: 0.7rem; opacity: 0.6; margin-top: 4px; }
+        .chat-input { display: flex; gap: 10px; }
+        .chat-input input { flex: 1; margin: 0; text-align: left; }
+        .chat-input button { width: auto; padding: 16px 24px; margin: 0; font-size: 1rem; }
+        .status { text-align: center; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 1rem; }
+        .status.connected { background: #10b98133; color: #34d399; }
+        .status.waiting { background: #f59e0b33; color: #fbbf24; }
+        .status.error { background: #ef444433; color: #f87171; }
+        .hidden { display: none; }
+        .join-buttons { display: flex; flex-direction: column; gap: 12px; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>💬 Scott & Mary Chat</h1>
-        <p class="subtitle">Private chat - no cell needed, just WiFi</p>
-        
+        <p class="subtitle">Private WiFi chat - no cell needed</p>
+
         <div id="joinSection">
             <div class="section">
-                <label>Enter family code:</label>
-                <input type="number" id="codeInput" placeholder="8-digit code" maxlength="8" style="text-align:center; font-size:1.5rem; letter-spacing:4px;">
-                <label style="margin-top:15px;">Then tap your name:</label>
+                <label>Enter the 8-digit code from Andrew:</label>
+                <input type="text" id="roomCode" placeholder="12345678" maxlength="8" pattern="[0-9]*" inputmode="numeric">
+            </div>
+            <div class="section">
+                <label>Then tap your name:</label>
                 <div class="join-buttons">
                     <button class="mary" onclick="joinAs('Mary')">I'm Mary</button>
                     <button class="scott" onclick="joinAs('Scott')">I'm Scott</button>
                 </div>
             </div>
         </div>
-        
-        <div id="chatSection">
+
+        <div id="chatSection" class="hidden">
             <div class="section">
-                <div class="connected-status" id="status">Connecting...</div>
+                <div class="status waiting" id="status">Connecting...</div>
                 <div class="messages" id="messages"></div>
                 <div class="chat-input">
                     <input type="text" id="messageInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendMessage()">
-                    <button id="sendBtn" onclick="sendMessage()">Send</button>
+                    <button onclick="sendMessage()" id="sendBtn">Send</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
-        import { getDatabase, ref, push, onChildAdded, orderByChild, query } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js';
-        
-        const firebaseConfig = {
-            apiKey: "AIzaSyDqPzVsYkXxGMQEK-jPscLMFpsWni0zPJU",
-            authDomain: "scottmarychat.firebaseapp.com",
-            databaseURL: "https://scottmarychat-default-rtdb.firebaseio.com",
-            projectId: "scottmarychat"
-        };
-        
-        let currentUser = '';
-        let db;
-        let messagesRef;
-        
-        window.joinAs = function(name) {
-            const code = document.getElementById('codeInput').value;
-            if (code.length !== 8 || !/^\d{8}$/.test(code)) {
-                alert('Please enter the 8-digit family code');
+    <script>
+        let peer, conn;
+        let userName = '';
+        let roomCode = '';
+        let isHost = false;
+        let connected = false;
+
+        function joinAs(name) {
+            roomCode = document.getElementById('roomCode').value.trim();
+            if (roomCode.length !== 8 || !/^\d{8}$/.test(roomCode)) {
+                alert('Please enter the 8-digit code from Andrew');
+                return;
+            }
+
+            userName = name;
+            document.getElementById('joinSection').classList.add('hidden');
+            document.getElementById('chatSection').classList.remove('hidden');
+            document.getElementById('sendBtn').className = name.toLowerCase();
+            
+            // Mary hosts, Scott connects
+            if (name === 'Mary') {
+                hostRoom();
+            } else {
+                joinRoom();
+            }
+        }
+
+        function hostRoom() {
+            isHost = true;
+            const peerId = 'scottmary' + roomCode + 'host';
+            
+            peer = new Peer(peerId);
+            
+            peer.on('open', () => {
+                setStatus('Waiting for Scott to join...', 'waiting');
+            });
+            
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupConnection();
+            });
+            
+            peer.on('error', (err) => {
+                console.error(err);
+                if (err.type === 'unavailable-id') {
+                    setStatus('Room already in use - try a different code', 'error');
+                } else {
+                    setStatus('Connection error - refresh and try again', 'error');
+                }
+            });
+        }
+
+        function joinRoom() {
+            const peerId = 'scottmary' + roomCode + 'guest';
+            const hostId = 'scottmary' + roomCode + 'host';
+            
+            peer = new Peer(peerId);
+            
+            peer.on('open', () => {
+                setStatus('Connecting to Mary...', 'waiting');
+                conn = peer.connect(hostId, { reliable: true });
+                setupConnection();
+            });
+            
+            peer.on('error', (err) => {
+                console.error(err);
+                if (err.type === 'peer-unavailable') {
+                    setStatus('Mary not connected yet - ask her to join first', 'error');
+                } else {
+                    setStatus('Connection error - refresh and try again', 'error');
+                }
+            });
+        }
+
+        function setupConnection() {
+            conn.on('open', () => {
+                connected = true;
+                setStatus('✓ Connected!', 'connected');
+            });
+            
+            conn.on('data', (data) => {
+                addMessage(data.name, data.text, false);
+            });
+            
+            conn.on('close', () => {
+                connected = false;
+                setStatus('Disconnected - refresh to reconnect', 'error');
+            });
+        }
+
+        function setStatus(text, type) {
+            const el = document.getElementById('status');
+            el.textContent = text;
+            el.className = 'status ' + type;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            
+            if (!text) return;
+            
+            if (!connected || !conn) {
+                alert('Not connected yet - wait for the other person');
                 return;
             }
             
-            currentUser = name;
-            
-            const app = initializeApp(firebaseConfig);
-            db = getDatabase(app);
-            messagesRef = ref(db, 'rooms/room' + code + '/messages');
-            
-            const q = query(messagesRef, orderByChild('timestamp'));
-            onChildAdded(q, (snapshot) => {
-                const msg = snapshot.val();
-                addMessage(msg.name, msg.text, msg.timestamp, msg.name === currentUser);
-            });
-            
-            document.getElementById('joinSection').style.display = 'none';
-            document.getElementById('chatSection').style.display = 'block';
-            document.getElementById('status').textContent = '✓ Connected as ' + name;
-            
-            const btn = document.getElementById('sendBtn');
-            btn.style.background = name === 'Mary' ? '#ec4899' : '#10b981';
+            conn.send({ name: userName, text: text });
+            addMessage(userName, text, true);
+            input.value = '';
         }
-        
-        window.sendMessage = function() {
-            const input = document.getElementById('messageInput');
-            const text = input.value.trim();
-            if (text && messagesRef) {
-                push(messagesRef, {
-                    name: currentUser,
-                    text: text,
-                    timestamp: Date.now()
-                });
-                input.value = '';
-            }
-        }
-        
-        function addMessage(name, text, timestamp, isMine) {
+
+        function addMessage(name, text, sent) {
             const div = document.createElement('div');
-            const colorClass = name.toLowerCase();
-            div.className = 'message ' + colorClass + (isMine ? ' sent' : '');
-            const time = new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            div.className = 'message ' + name.toLowerCase();
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             div.innerHTML = `<div class="name">${name}</div>${text}<div class="time">${time}</div>`;
             document.getElementById('messages').appendChild(div);
             document.getElementById('messages').scrollTop = 999999;
