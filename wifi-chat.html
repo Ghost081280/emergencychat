@@ -215,9 +215,8 @@
             pc = new RTCPeerConnection(config);
             
             pc.onicecandidate = (e) => {
-                if (pc.iceGatheringState === 'complete') {
-                    document.getElementById('localCode').value = btoa(JSON.stringify(pc.localDescription));
-                }
+                // Update code every time we get a candidate or when gathering completes
+                document.getElementById('localCode').value = btoa(JSON.stringify(pc.localDescription));
             };
             
             pc.onconnectionstatechange = () => {
@@ -252,6 +251,9 @@
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             
+            // Show code immediately (will update as ICE candidates arrive)
+            document.getElementById('localCode').value = btoa(JSON.stringify(pc.localDescription));
+            
             updateStatus('Room created! Share your code below', 'waiting');
             document.getElementById('createBtn').disabled = true;
         }
@@ -277,6 +279,7 @@
                     await pc.setRemoteDescription(decoded);
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
+                    document.getElementById('localCode').value = btoa(JSON.stringify(pc.localDescription));
                     updateStatus('Send YOUR code back to them!', 'waiting');
                 } else if (decoded.type === 'answer') {
                     await pc.setRemoteDescription(decoded);
