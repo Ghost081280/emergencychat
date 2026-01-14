@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiFi Chat</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #fff;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 1.5rem;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
+        .status.waiting { background: #f59e0b33; color: #fbbf24; }
+        .status.connected { background: #10b98133; color: #34d399; }
+        .status.error { background: #ef444433; color: #f87171; }
+        
+        .section {
+            background: #ffffff10;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .section h2 {
+            font-size: 1rem;
+            margin-bottom: 10px;
+            color: #94a3b8;
+        }
+        
+        input, textarea, button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+        input, textarea {
+            background: #ffffff15;
+            color: #fff;
+        }
+        input::placeholder, textarea::placeholder {
+            color: #666;
+        }
+        textarea {
+            resize: none;
+            font-family: monospace;
+            font-size: 0.75rem;
+            height: 80px;
+        }
+        button {
+            background: #3b82f6;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #2563eb; }
+        button:disabled { background: #444; cursor: not-allowed; }
+        button.secondary {
+            background: #475569;
+        }
+        button.secondary:hover { background: #64748b; }
+        
+        .messages {
+            height: 250px;
+            overflow-y: auto;
+            background: #00000030;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .message {
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+        .message.sent {
+            background: #3b82f6;
+            margin-left: auto;
+        }
+        .message.received {
+            background: #475569;
+        }
+        .message .time {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            margin-top: 4px;
+        }
+        
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        .chat-input input {
+            flex: 1;
+            margin: 0;
+        }
+        .chat-input button {
+            width: auto;
+            padding: 12px 20px;
+            margin: 0;
+        }
+        
+        .instructions {
+            background: #3b82f620;
+            border-left: 3px solid #3b82f6;
+            padding: 12px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 15px;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+        .step { margin-bottom: 8px; }
+        .step:last-child { margin-bottom: 0; }
+        
+        #setupSection { display: block; }
+        #chatSection { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💬 Scott & Mary Chat</h1>
+        <p class="subtitle">Private WiFi chat - no cell needed</p>
+        
+        <div id="statusBar" class="status waiting">Setting up...</div>
+        
+        <div id="setupSection">
+            <div class="instructions">
+                <div class="step"><strong>Step 1:</strong> Enter your name below</div>
+                <div class="step"><strong>Step 2:</strong> Mary: Click "Create Room" — Scott: Wait for code</div>
+                <div class="step"><strong>Step 3:</strong> Andrew will relay the codes between you</div>
+            </div>
+            
+            <div class="section">
+                <h2>Your Name</h2>
+                <input type="text" id="userName" placeholder="Enter your name">
+            </div>
+            
+            <div class="section">
+                <h2>Start a Chat</h2>
+                <button id="createBtn" onclick="createOffer()">Create Room (Mary click this)</button>
+            </div>
+            
+            <div class="section">
+                <h2>Your Code (send this to other person)</h2>
+                <textarea id="localCode" readonly placeholder="Your code will appear here..."></textarea>
+                <button class="secondary" onclick="copyCode()">📋 Copy Code</button>
+            </div>
+            
+            <div class="section">
+                <h2>Paste Other Person's Code</h2>
+                <textarea id="remoteCode" placeholder="Paste the code you received here..."></textarea>
+                <button onclick="processRemoteCode()">Connect</button>
+            </div>
+        </div>
+        
+        <div id="chatSection">
+            <div class="section">
+                <div class="messages" id="messages"></div>
+                <div class="chat-input">
+                    <input type="text" id="messageInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendMessage()">
+                    <button onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+            <button class="secondary" onclick="location.reload()">Start New Chat</button>
+        </div>
+    </div>
+
+    <script>
+        let pc;
+        let dc;
+        let userName = '';
+        
+        const config = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+        
+        function updateStatus(text, type) {
+            const bar = document.getElementById('statusBar');
+            bar.textContent = text;
+            bar.className = 'status ' + type;
+        }
+        
+        function init() {
+            pc = new RTCPeerConnection(config);
+            
+            pc.onicecandidate = (e) => {
+                if (pc.iceGatheringState === 'complete') {
+                    document.getElementById('localCode').value = btoa(JSON.stringify(pc.localDescription));
+                }
+            };
+            
+            pc.onconnectionstatechange = () => {
+                if (pc.connectionState === 'connected') {
+                    showChat();
+                }
+            };
+        }
+        
+        function setupDataChannel(channel) {
+            dc = channel;
+            dc.onopen = () => {
+                updateStatus('Connected! 🎉', 'connected');
+                showChat();
+            };
+            dc.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                addMessage(data.name, data.text, false);
+            };
+            dc.onclose = () => {
+                updateStatus('Disconnected', 'error');
+            };
+        }
+        
+        async function createOffer() {
+            userName = document.getElementById('userName').value || 'Mary';
+            init();
+            
+            const channel = pc.createDataChannel('chat');
+            setupDataChannel(channel);
+            
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            
+            updateStatus('Room created! Share your code below', 'waiting');
+            document.getElementById('createBtn').disabled = true;
+        }
+        
+        async function processRemoteCode() {
+            const code = document.getElementById('remoteCode').value.trim();
+            if (!code) {
+                alert('Please paste the other person\'s code');
+                return;
+            }
+            
+            userName = document.getElementById('userName').value || 'Scott';
+            
+            try {
+                const decoded = JSON.parse(atob(code));
+                
+                if (!pc) {
+                    init();
+                    pc.ondatachannel = (e) => setupDataChannel(e.channel);
+                }
+                
+                if (decoded.type === 'offer') {
+                    await pc.setRemoteDescription(decoded);
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    updateStatus('Send YOUR code back to them!', 'waiting');
+                } else if (decoded.type === 'answer') {
+                    await pc.setRemoteDescription(decoded);
+                    updateStatus('Connecting...', 'waiting');
+                }
+            } catch (e) {
+                alert('Invalid code. Make sure you copied the whole thing!');
+                console.error(e);
+            }
+        }
+        
+        function copyCode() {
+            const code = document.getElementById('localCode').value;
+            if (code) {
+                navigator.clipboard.writeText(code).then(() => {
+                    alert('Code copied! Send this to the other person.');
+                });
+            } else {
+                alert('No code yet - click "Create Room" first');
+            }
+        }
+        
+        function showChat() {
+            document.getElementById('setupSection').style.display = 'none';
+            document.getElementById('chatSection').style.display = 'block';
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (text && dc && dc.readyState === 'open') {
+                dc.send(JSON.stringify({ name: userName, text: text }));
+                addMessage(userName, text, true);
+                input.value = '';
+            }
+        }
+        
+        function addMessage(name, text, sent) {
+            const div = document.createElement('div');
+            div.className = 'message ' + (sent ? 'sent' : 'received');
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            div.innerHTML = `<strong>${name}</strong><br>${text}<div class="time">${time}</div>`;
+            document.getElementById('messages').appendChild(div);
+            document.getElementById('messages').scrollTop = 999999;
+        }
+        
+        updateStatus('Enter your name and create a room or join one', 'waiting');
+    </script>
+</body>
+</html>
