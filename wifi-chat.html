@@ -289,8 +289,9 @@
             document.getElementById('partnerName').textContent = partnerName;
 
             await requestNotificationPermission();
-            await loadHistory();
             connectToStream();
+            sendPresence(); // Send immediately
+            await loadHistory();
             startPresence();
         }
 
@@ -502,11 +503,6 @@
         }
 
         async function startCall() {
-            if (!partnerOnline) {
-                alert(`${partnerName} is offline`);
-                return;
-            }
-
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             } catch(e) {
