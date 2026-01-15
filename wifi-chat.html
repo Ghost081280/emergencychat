@@ -91,7 +91,7 @@
 
         <div id="chatSection" class="hidden">
             <div class="section">
-                <div class="status connected" id="status">✓ Connected</div>
+                <div class="status waiting" id="status">Connecting...</div>
                 <div class="messages" id="messages"></div>
                 <div class="chat-input">
                     <input type="text" id="messageInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendMessage()">
@@ -102,12 +102,10 @@
     </div>
 
     <script>
-        const PIPE_SERVER = 'https://ppng.io';
         let userName = '';
         let roomCode = '';
-        let myChannel = '';
-        let theirChannel = '';
-        let listening = false;
+        let topicName = '';
+        let eventSource = null;
 
         function joinAs(name) {
             roomCode = document.getElementById('roomCode').value.trim();
@@ -117,47 +115,44 @@
             }
 
             userName = name;
-            
-            // Mary listens on channel A, sends on channel B
-            // Scott listens on channel B, sends on channel A
-            if (name === 'Mary') {
-                myChannel = `${PIPE_SERVER}/scottmary${roomCode}A`;
-                theirChannel = `${PIPE_SERVER}/scottmary${roomCode}B`;
-            } else {
-                myChannel = `${PIPE_SERVER}/scottmary${roomCode}B`;
-                theirChannel = `${PIPE_SERVER}/scottmary${roomCode}A`;
-            }
+            topicName = 'scottmarychat' + roomCode;
 
             document.getElementById('joinSection').classList.add('hidden');
             document.getElementById('chatSection').classList.remove('hidden');
             document.getElementById('sendBtn').className = name.toLowerCase();
-            document.getElementById('status').textContent = '✓ Connected as ' + name;
             
-            // Start listening for messages
-            listenForMessages();
+            // Connect to ntfy stream
+            connectToStream();
         }
 
-        async function listenForMessages() {
-            listening = true;
-            while (listening) {
+        function connectToStream() {
+            const url = `https://ntfy.sh/${topicName}/sse`;
+            
+            eventSource = new EventSource(url);
+            
+            eventSource.onopen = () => {
+                document.getElementById('status').textContent = '✓ Connected as ' + userName;
+                document.getElementById('status').className = 'status connected';
+            };
+            
+            eventSource.onmessage = (e) => {
                 try {
-                    const response = await fetch(myChannel);
-                    if (response.ok) {
-                        const text = await response.text();
-                        try {
-                            const data = JSON.parse(text);
-                            if (data.name && data.text) {
-                                addMessage(data.name, data.text, false);
-                            }
-                        } catch (e) {
-                            // Not valid JSON, ignore
+                    const data = JSON.parse(e.data);
+                    if (data.message) {
+                        const msg = JSON.parse(data.message);
+                        if (msg.name !== userName) {
+                            addMessage(msg.name, msg.text, false);
                         }
                     }
-                } catch (e) {
-                    // Connection error, wait and retry
-                    await new Promise(r => setTimeout(r, 1000));
+                } catch (err) {
+                    // Ignore parse errors
                 }
-            }
+            };
+            
+            eventSource.onerror = () => {
+                document.getElementById('status').textContent = 'Reconnecting...';
+                document.getElementById('status').className = 'status waiting';
+            };
         }
 
         async function sendMessage() {
@@ -166,17 +161,17 @@
             
             if (!text) return;
             
-            const msg = { name: userName, text: text };
+            const msg = JSON.stringify({ name: userName, text: text });
             
             try {
-                fetch(theirChannel, {
+                await fetch(`https://ntfy.sh/${topicName}`, {
                     method: 'POST',
-                    body: JSON.stringify(msg)
+                    body: msg
                 });
                 addMessage(userName, text, true);
                 input.value = '';
             } catch (e) {
-                alert('Failed to send - check your connection');
+                alert('Failed to send - try again');
             }
         }
 
