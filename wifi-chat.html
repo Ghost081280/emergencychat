@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scott & Mary Chat</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -41,11 +40,8 @@
             font-size: 1.2rem;
             padding: 20px;
         }
-        button:hover { background: #2563eb; }
         button.mary { background: #ec4899; }
-        button.mary:hover { background: #db2777; }
         button.scott { background: #10b981; }
-        button.scott:hover { background: #059669; }
         .messages {
             height: 320px;
             overflow-y: auto;
@@ -67,10 +63,9 @@
         .chat-input { display: flex; gap: 10px; }
         .chat-input input { flex: 1; margin: 0; text-align: left; }
         .chat-input button { width: auto; padding: 16px 24px; margin: 0; font-size: 1rem; }
-        .status { text-align: center; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 1rem; }
+        .status { text-align: center; padding: 12px; border-radius: 8px; margin-bottom: 10px; }
         .status.connected { background: #10b98133; color: #34d399; }
         .status.waiting { background: #f59e0b33; color: #fbbf24; }
-        .status.error { background: #ef444433; color: #f87171; }
         .hidden { display: none; }
         .join-buttons { display: flex; flex-direction: column; gap: 12px; }
     </style>
@@ -82,11 +77,11 @@
 
         <div id="joinSection">
             <div class="section">
-                <label>Enter the 8-digit code from Andrew:</label>
-                <input type="text" id="roomCode" placeholder="12345678" maxlength="8" pattern="[0-9]*" inputmode="numeric">
+                <label>Enter the 8-digit code:</label>
+                <input type="text" id="roomCode" placeholder="Enter 8-digit code" maxlength="8" inputmode="numeric">
             </div>
             <div class="section">
-                <label>Then tap your name:</label>
+                <label>Tap your name:</label>
                 <div class="join-buttons">
                     <button class="mary" onclick="joinAs('Mary')">I'm Mary</button>
                     <button class="scott" onclick="joinAs('Scott')">I'm Scott</button>
@@ -96,7 +91,7 @@
 
         <div id="chatSection" class="hidden">
             <div class="section">
-                <div class="status waiting" id="status">Connecting...</div>
+                <div class="status connected" id="status">✓ Connected</div>
                 <div class="messages" id="messages"></div>
                 <div class="chat-input">
                     <input type="text" id="messageInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendMessage()">
@@ -107,115 +102,82 @@
     </div>
 
     <script>
-        let peer, conn;
+        const PIPE_SERVER = 'https://ppng.io';
         let userName = '';
         let roomCode = '';
-        let isHost = false;
-        let connected = false;
+        let myChannel = '';
+        let theirChannel = '';
+        let listening = false;
 
         function joinAs(name) {
             roomCode = document.getElementById('roomCode').value.trim();
             if (roomCode.length !== 8 || !/^\d{8}$/.test(roomCode)) {
-                alert('Please enter the 8-digit code from Andrew');
+                alert('Please enter an 8-digit code');
                 return;
             }
 
             userName = name;
+            
+            // Mary listens on channel A, sends on channel B
+            // Scott listens on channel B, sends on channel A
+            if (name === 'Mary') {
+                myChannel = `${PIPE_SERVER}/scottmary${roomCode}A`;
+                theirChannel = `${PIPE_SERVER}/scottmary${roomCode}B`;
+            } else {
+                myChannel = `${PIPE_SERVER}/scottmary${roomCode}B`;
+                theirChannel = `${PIPE_SERVER}/scottmary${roomCode}A`;
+            }
+
             document.getElementById('joinSection').classList.add('hidden');
             document.getElementById('chatSection').classList.remove('hidden');
             document.getElementById('sendBtn').className = name.toLowerCase();
+            document.getElementById('status').textContent = '✓ Connected as ' + name;
             
-            // Mary hosts, Scott connects
-            if (name === 'Mary') {
-                hostRoom();
-            } else {
-                joinRoom();
+            // Start listening for messages
+            listenForMessages();
+        }
+
+        async function listenForMessages() {
+            listening = true;
+            while (listening) {
+                try {
+                    const response = await fetch(myChannel);
+                    if (response.ok) {
+                        const text = await response.text();
+                        try {
+                            const data = JSON.parse(text);
+                            if (data.name && data.text) {
+                                addMessage(data.name, data.text, false);
+                            }
+                        } catch (e) {
+                            // Not valid JSON, ignore
+                        }
+                    }
+                } catch (e) {
+                    // Connection error, wait and retry
+                    await new Promise(r => setTimeout(r, 1000));
+                }
             }
         }
 
-        function hostRoom() {
-            isHost = true;
-            const peerId = 'scottmary' + roomCode + 'host';
-            
-            peer = new Peer(peerId);
-            
-            peer.on('open', () => {
-                setStatus('Waiting for Scott to join...', 'waiting');
-            });
-            
-            peer.on('connection', (connection) => {
-                conn = connection;
-                setupConnection();
-            });
-            
-            peer.on('error', (err) => {
-                console.error(err);
-                if (err.type === 'unavailable-id') {
-                    setStatus('Room already in use - try a different code', 'error');
-                } else {
-                    setStatus('Connection error - refresh and try again', 'error');
-                }
-            });
-        }
-
-        function joinRoom() {
-            const peerId = 'scottmary' + roomCode + 'guest';
-            const hostId = 'scottmary' + roomCode + 'host';
-            
-            peer = new Peer(peerId);
-            
-            peer.on('open', () => {
-                setStatus('Connecting to Mary...', 'waiting');
-                conn = peer.connect(hostId, { reliable: true });
-                setupConnection();
-            });
-            
-            peer.on('error', (err) => {
-                console.error(err);
-                if (err.type === 'peer-unavailable') {
-                    setStatus('Mary not connected yet - ask her to join first', 'error');
-                } else {
-                    setStatus('Connection error - refresh and try again', 'error');
-                }
-            });
-        }
-
-        function setupConnection() {
-            conn.on('open', () => {
-                connected = true;
-                setStatus('✓ Connected!', 'connected');
-            });
-            
-            conn.on('data', (data) => {
-                addMessage(data.name, data.text, false);
-            });
-            
-            conn.on('close', () => {
-                connected = false;
-                setStatus('Disconnected - refresh to reconnect', 'error');
-            });
-        }
-
-        function setStatus(text, type) {
-            const el = document.getElementById('status');
-            el.textContent = text;
-            el.className = 'status ' + type;
-        }
-
-        function sendMessage() {
+        async function sendMessage() {
             const input = document.getElementById('messageInput');
             const text = input.value.trim();
             
             if (!text) return;
             
-            if (!connected || !conn) {
-                alert('Not connected yet - wait for the other person');
-                return;
-            }
+            const msg = { name: userName, text: text };
             
-            conn.send({ name: userName, text: text });
-            addMessage(userName, text, true);
-            input.value = '';
+            try {
+                fetch(theirChannel, {
+                    method: 'POST',
+                    body: JSON.stringify(msg)
+                });
+                addMessage(userName, text, true);
+                input.value = '';
+            } catch (e) {
+                alert('Failed to send - check your connection');
+            }
         }
 
         function addMessage(name, text, sent) {
